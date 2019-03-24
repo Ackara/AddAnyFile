@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -171,6 +172,8 @@ namespace MadsKristensen.AddAnyFile
 
         static string[] GetParsedInput(string input)
         {
+            input = ExpandItemGroup(input);
+
             // var tests = new string[] { "file1.txt", "file1.txt, file2.txt", ".ignore", ".ignore.(old,new)", "license", "folder/",
             //    "folder\\", "folder\\file.txt", "folder/.thing", "page.aspx.cs", "widget-1.(html,js)", "pages\\home.(aspx, aspx.cs)",
             //    "home.(html,js), about.(html,js,css)", "backup.2016.(old, new)", "file.(txt,txt,,)", "file_@#d+|%.3-2...3^&.txt" };
@@ -274,6 +277,30 @@ namespace MadsKristensen.AddAnyFile
                 }
             }
             return folder;
+        }
+
+        private static string ExpandItemGroup(string value)
+        {
+            string userItemGroupConfigFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), nameof(AddAnyFile), "itemGroups.json");
+            if (File.Exists(userItemGroupConfigFile))
+            {
+                Match match = Regex.Match(value, @"(?i)@\((?<key>[a-z0-9 _\-]+)\)");
+                if (match.Success)
+                {
+                    using (Stream data = File.OpenRead(userItemGroupConfigFile))
+                    {
+                        var serializer = new DataContractJsonSerializer(typeof(ItemGroup[]));
+                        var itemGroups = (ItemGroup[])serializer.ReadObject(data);
+                        if (itemGroups?.Length < 1) return value;
+
+                        string key = match.Groups["key"].Value;
+                        ItemGroup target = itemGroups?.FirstOrDefault(x => string.Equals(x.Name, key, StringComparison.OrdinalIgnoreCase));
+                        return (target == null ? value : string.Join(",", target.FileList));
+                    }
+                }
+            }
+
+            return value;
         }
     }
 }
